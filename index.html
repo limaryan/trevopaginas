@@ -1,273 +1,98 @@
-<!doctype html>
-<html lang="pt-br">
+<!DOCTYPE html>
+<html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Gerador de Bilhetes - Remessa</title>
-<style>
-  :root{
-    --bg: #f7fff7;
-    --card-bg: #ffffff;
-    --accent: #2e8b57;
-    --trevo: #2e8b57;
-    --text:#222;
-  }
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; margin:20px; background:var(--bg); color:var(--text);}
-  header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px;}
-  h1{font-size:1.2rem;margin:0}
-  .controls{display:flex;gap:8px;align-items:center;}
-  input[type="number"]{width:90px;padding:6px;border-radius:6px;border:1px solid #ccc}
-  input[type="text"]{width:220px;padding:6px;border-radius:6px;border:1px solid #ccc}
-  button{background:var(--accent);color:white;border:0;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600}
-  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-  button[disabled]{opacity:.5;cursor:not-allowed}
-  main{margin-top:10px;}
+  <meta charset="UTF-8">
+  <title>Gerador de Bilhetes</title>
 
-  /* área de impressão */
-  #printArea{max-width: 210mm;margin: 0 auto;}
-  .page{width:210mm;min-height:297mm;padding:12mm 10mm;box-sizing:border-box;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:min-content;gap:12px; page-break-after:always;}
-  .ticket{
-    background:var(--card-bg);
-    padding:10px;
-    border-radius:8px;
-    box-shadow:0 1px 4px rgba(0,0,0,0.06);
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    min-height:85mm; /* ajustar conforme necessidade */
-    box-sizing:border-box;
-  }
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
 
-  /* Trevo + números layout */
-  .trevo-svg{width:64px;height:64px;margin-bottom:8px;}
-  .numbers{display:flex;gap:8px;font-weight:700;font-size:16px;flex-wrap:wrap;justify-content:center}
-  .num{min-width:64px;text-align:center;padding:6px 8px;border-radius:6px;background:#eaf9ee}
-  .meta{margin-top:8px;font-size:12px;color:#555}
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 20px;
+    }
 
-  /* print helpers */
-  @media print{
-    body{background:white}
-    header, .controls, #actions{display:none}
-    .page{box-shadow:none;margin:0;padding:6mm}
-    .ticket{box-shadow:none;border:1px solid #ddd}
-  }
+    .ticket {
+      width: 300px;
+      height: 550px;
+      background-image: url('https://SEU-LINK-AQUI/ticket.png');
+      background-size: cover;
+      background-position: center;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      padding-bottom: 40px;
+      font-size: 32px;
+      font-weight: bold;
+      border: 1px solid #000;
+    }
 
-  /* mensagem de status */
-  #status{margin-top:10px;color:#333}
-</style>
+    @media print {
+      input, select, button {
+        display: none !important;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<header>
-  <h1>Gerador de Bilhetes — Remessa</h1>
+<h2>Gerador de Bilhetes</h2>
 
-  <div class="controls">
-    <!-- Nome do vendedor (não aparece no bilhete, apenas para registro) -->
-    <input id="vendedor" type="text" placeholder="Nome do vendedor (registro)" />
+<label>Vendedor:</label>
+<input id="vendedor" type="text">
 
-    <!-- Quantidade por remessa -->
-    <label style="font-size:13px;color:#444">Qtd
-      <input id="quantidade" type="number" min="1" max="5000" value="100" />
-    </label>
+<br><br>
 
-    <button id="btnGerar">Gerar Remessa</button>
-    <button id="btnNova" class="ghost" style="display:none">Gerar nova remessa</button>
-    <button id="btnImprimir" class="ghost" style="display:none">Imprimir</button>
-  </div>
-</header>
+<label>Quantidade por lote:</label>
+<select id="qtd">
+  <option value="100">100</option>
+  <option value="50">50</option>
+  <option value="20">20</option>
+</select>
 
-<main>
-  <div id="status"></div>
+<br><br>
 
-  <!-- área que receberá as páginas com bilhetes -->
-  <div id="printArea" aria-live="polite"></div>
-</main>
+<button onclick="gerar()">Gerar Lote</button>
+
+<div id="printArea"></div>
 
 <script>
-/*
-  Substitua pela URL do seu Apps Script (web app) que aceita POST de um lote.
-  O Apps Script deverá aceitar um POST com JSON:
-  {
-    vendedor: "...",
-    loteId: "opcional-id",
-    bilhetes: [
-      { m1:1234, m2:2345, m3:3456, m4:4567, chave:"1234-2345-3456-4567" },
-      ...
-    ]
-  }
-*/
-const API_URL = "URL_DO_APPS_SCRIPT_AQUI"; // <-- substitua
+function gerar() {
+  const vendedor = document.getElementById("vendedor").value;
+  const qtd = Number(document.getElementById("qtd").value);
 
-// Configuração do layout
-const COLS = 3;
-const ROWS = 5; // total por página = 15
-const POR_PAGINA = COLS * ROWS;
-
-// faixa dos milhares
-const MIN = 1000;
-const MAX = 9999;
-
-// Set local para evitar duplicatas na sessão
-const usados = new Set();
-
-// DOM
-const btnGerar = document.getElementById('btnGerar');
-const btnNova = document.getElementById('btnNova');
-const btnImprimir = document.getElementById('btnImprimir');
-const printArea = document.getElementById('printArea');
-const status = document.getElementById('status');
-const vendedorInput = document.getElementById('vendedor');
-const quantidadeInput = document.getElementById('quantidade');
-
-btnGerar.addEventListener('click', async () => {
-  const vendedor = vendedorInput.value.trim();
-  const qtd = parseInt(quantidadeInput.value, 10) || 100;
-  // bloquear botão
-  btnGerar.disabled = true;
-  status.innerText = "Gerando remessa — aguarde...";
-  try {
-    const lote = await gerarLote(qtd);
-    montarPaginasHTML(lote);
-    // enviar para a planilha (API)
-    await enviarLoteParaAPI({ vendedor, bilhetes: lote });
-    status.innerText = `Remessa gerada: ${lote.length} bilhetes. Enviados para planilha.`;
-    // esconder botão gerar e mostrar nova remessa e imprimir
-    btnGerar.style.display = 'none';
-    btnNova.style.display = 'inline-block';
-    btnImprimir.style.display = 'inline-block';
-  } catch (err) {
-    console.error(err);
-    status.innerText = 'Erro ao gerar remessa: ' + (err.message || err);
-    btnGerar.disabled = false;
-  }
-});
-
-btnNova.addEventListener('click', () => {
-  // limpa área para nova remessa e permite gerar outra
-  printArea.innerHTML = '';
-  status.innerText = '';
-  btnGerar.style.display = 'inline-block';
-  btnGerar.disabled = false;
-  btnNova.style.display = 'none';
-  btnImprimir.style.display = 'none';
-});
-
-btnImprimir.addEventListener('click', () => {
-  window.print();
-});
-
-function gerarMilhar(){
-  return Math.floor(Math.random() * (MAX - MIN + 1)) + MIN;
-}
-
-function gerarBilheteUnicoLocal(){
-  // gera até achar um bilhete não usado localmente
-  for(;;){
-    const m1 = gerarMilhar();
-    const m2 = gerarMilhar();
-    const m3 = gerarMilhar();
-    const m4 = gerarMilhar();
-    const chave = `${m1}-${m2}-${m3}-${m4}`;
-    if(!usados.has(chave)){
-      usados.add(chave);
-      return { m1, m2, m3, m4, chave };
-    }
-    // se colidir, repete
-  }
-}
-
-async function gerarLote(n){
-  const lote = [];
-  while(lote.length < n){
-    lote.push(gerarBilheteUnicoLocal());
-    // opcional: evitar loop infinito em extremo (quando espaço esgotado)
-    if(usados.size > 8000000 && lote.length < n){
-      throw new Error('muitos bilhetes usados — impossível gerar mais');
-    }
-  }
-  return lote;
-}
-
-function montarPaginasHTML(lote){
-  printArea.innerHTML = '';
-  const total = lote.length;
-  let pageIndex = 0;
-  for(let i=0;i<total;i+=POR_PAGINA){
-    const pageItems = lote.slice(i, i+POR_PAGINA);
-    const page = document.createElement('div');
-    page.className = 'page';
-    page.dataset.page = ++pageIndex;
-    pageItems.forEach(bilhete => {
-      const card = document.createElement('div');
-      card.className = 'ticket';
-      card.innerHTML = `
-        ${svgTrevo()}
-        <div class="numbers">
-          <div class="num">${bilhete.m1}</div>
-          <div class="num">${bilhete.m2}</div>
-          <div class="num">${bilhete.m3}</div>
-          <div class="num">${bilhete.m4}</div>
-        </div>
-        <div class="meta">#${bilhete.chave}</div>
-      `;
-      page.appendChild(card);
-    });
-
-    // se a última página não preencher totalmente, adicionar cards vazios para manter grid
-    const faltam = POR_PAGINA - pageItems.length;
-    for(let k=0;k<faltam;k++){
-      const empty = document.createElement('div');
-      empty.className = 'ticket';
-      empty.style.visibility = 'hidden';
-      page.appendChild(empty);
-    }
-
-    printArea.appendChild(page);
-  }
-
-  // rolar até a área impressa para usuário ver
-  printArea.scrollIntoView({behavior:'smooth'});
-}
-
-function svgTrevo(){
-  // pequeno trevo SVG para exibir no bilhete (você pode trocar por imagem externa)
-  return `
-    <svg class="trevo-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <g transform="translate(32,32)">
-        <path d="M-2 -6 C -12 -18 -28 -6 -10 6 C -28 18 -12 30 -2 18 C 8 30 24 18 6 6 C 24 -6 8 -18 -2 -6 Z" fill="${getComputedStyle(document.documentElement).getPropertyValue('--trevo') || '#2e8b57'}" />
-      </g>
-    </svg>
-  `;
-}
-
-/* Envia o lote para a API (Apps Script)
-   payload: { vendedor: string, bilhetes: [...] }
-   Retorna a resposta JSON do servidor.
-*/
-async function enviarLoteParaAPI(payload){
-  if(!API_URL || API_URL.includes('URL_DO_APPS_SCRIPT_AQUI')){
-    console.warn('API_URL não configurada — pulando envio para planilha.');
+  if (!vendedor) {
+    alert("Digite o nome do vendedor!");
     return;
   }
 
-  // Enviar via POST como JSON. O Apps Script deve responder com JSON.
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+  google.script.run
+    .withSuccessHandler(mostrarBilhetes)
+    .gerarBilhetes(vendedor, qtd);
+}
+
+function mostrarBilhetes(numeros) {
+  const container = document.getElementById("printArea");
+  container.innerHTML = "";
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+
+  numeros.forEach(num => {
+    const t = document.createElement("div");
+    t.className = "ticket";
+    t.innerText = num;
+    grid.appendChild(t);
   });
 
-  if(!resp.ok){
-    const text = await resp.text();
-    throw new Error('Erro na API: ' + resp.status + ' ' + text);
-  }
-
-  const data = await resp.json();
-  // espera que o Apps Script devolva { ok: true, gravados: N, duplicates: [...] } por exemplo
-  console.log('Resposta API:', data);
-  return data;
+  container.appendChild(grid);
 }
 </script>
+
 </body>
 </html>
